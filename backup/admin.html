@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura Gold - Admin Command</title>
+    <link rel="icon" href="https://placehold.co/32x32/d4af37/000?text=A&font=inter" type="image/png">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Visualization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- jsPDF for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide-react@latest/dist/lucide-react.js"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #050505;
+            --panel-bg: rgba(20, 20, 20, 0.7);
+            --panel-border: rgba(212, 175, 55, 0.2);
+            --gold-color: #d4af37;
+            --gold-hover: #f0c44d;
+            --text-primary: #e5e7eb;
+            --text-muted: #9ca3af;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow: hidden;
+            margin: 0;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .themed-input {
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--panel-border);
+            color: white;
+            transition: all 0.3s;
+        }
+        .themed-input:focus {
+            border-color: var(--gold-color);
+            box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+            outline: none;
+        }
+
+        .gold-text { color: var(--gold-color); }
+        .gold-bg { background-color: var(--gold-color); color: black; }
+        .gold-bg:hover { background-color: var(--gold-hover); }
+
+        .nav-btn {
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .nav-btn.active {
+            background: rgba(212, 175, 55, 0.1);
+            border-left-color: var(--gold-color);
+            color: var(--gold-color);
+        }
+        .nav-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--gold-color); }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .status-processing { background-color: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+        .status-transit { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+        .status-delivered, .status-completed { background-color: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .status-pending, .status-review { background-color: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+        .status-funds { background-color: rgba(236, 72, 153, 0.2); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.4); }
+
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Mobile Sidebar Transition */
+        .sidebar-mobile {
+            transform: translateX(-100%);
+        }
+        .sidebar-mobile.open {
+            transform: translateX(0);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Background -->
+    <div id="canvas-container"></div>
+
+    <!-- Auth Overlay -->
+    <div id="login-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="glass-panel p-6 md:p-8 rounded-xl max-w-md w-full text-center border-t-4 border-yellow-600">
+            <div class="mb-6 inline-block p-4 rounded-full bg-yellow-900/20 border border-yellow-600/50">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-check"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
+            <h1 class="text-2xl md:text-3xl font-bold mb-2 tracking-wider">ADMIN <span class="gold-text">COMMAND</span></h1>
+            <p class="text-gray-400 mb-8 text-sm">Authorized Personnel Only. Access to Global Vault Ledger.</p>
+            
+            <form id="login-form" class="space-y-4">
+                <input type="email" id="admin-email" placeholder="Admin ID" class="w-full themed-input rounded-lg p-3 text-center font-mono">
+                <input type="password" id="admin-password" placeholder="Access Key" class="w-full themed-input rounded-lg p-3 text-center font-mono">
+                <button type="submit" class="w-full gold-bg py-3 rounded-lg font-bold tracking-wide transform transition hover:scale-[1.02]">AUTHENTICATE</button>
+            </form>
+            <p class="text-xs text-gray-600 mt-6 mono">SYSTEM VERSION 2.8.0 // MOBILE READY</p>
+        </div>
+    </div>
+
+    <!-- Main Dashboard (Hidden by default) -->
+    <div id="app-container" class="flex h-screen hidden fade-in relative overflow-hidden">
+        
+        <!-- Mobile Sidebar Backdrop -->
+        <div id="sidebar-backdrop" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden backdrop-blur-sm transition-opacity"></div>
+
+        <!-- Sidebar -->
+        <aside id="admin-sidebar" class="fixed inset-y-0 left-0 z-40 w-64 glass-panel flex flex-col border-r border-r-yellow-900/20 sidebar-mobile transition-transform duration-300 ease-in-out md:relative md:translate-x-0">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center">
+                <div>
+                    <h1 class="text-xl font-bold tracking-wider flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        AURA <span class="gold-text">ADMIN</span>
+                    </h1>
+                    <p class="text-xs text-gray-500 mt-1 mono" id="admin-id-display">ID: UNKNOWN</p>
+                </div>
+                <!-- Close Button (Mobile Only) -->
+                <button onclick="toggleSidebar()" class="md:hidden text-gray-400 hover:text-white p-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+                </button>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+                <button onclick="switchView('dashboard')" id="nav-dashboard" class="nav-btn active w-full text-left px-4 py-3 rounded flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                    Overview
+                </button>
+                <!-- Transactions Tab -->
+                <button onclick="switchView('transactions')" id="nav-transactions" class="nav-btn w-full text-left px-4 py-3 rounded flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 0C1.46 6.7 1.33 10.28 4 13l8 8 8-8c2.67-2.72 2.54-6.3.42-8.42z"/></svg>
+                    Transactions
+                </button>
+                <button onclick="switchView('shipments')" id="nav-shipments" class="nav-btn w-full text-left px-4 py-3 rounded flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17h4V5H2v12h3m1-7 2 2 4-4"/><path d="M10 17h4V5H2v12h3m1-7 2 2 4-4M10 17h4m-4 0h-3V9h1.7M14 17h3l4-4V5h-7v8m0 4h3m0 0 4-4m-4 4-1.2-1.2"/></svg>
+                    Logistics / Tracking
+                </button>
+                <button onclick="switchView('assets')" id="nav-assets" class="nav-btn w-full text-left px-4 py-3 rounded flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16.8 7.2A11 11 0 0 0 12 23a11 11 0 0 0 5.2-15.8"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93 7.76 7.76"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+                    Global Vault
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-white/5">
+                <button id="logout-btn" class="w-full py-2 text-sm text-red-400 hover:text-red-300 flex items-center justify-center gap-2 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                    Terminate Session
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-4 md:p-8 overflow-y-auto relative z-10 flex flex-col h-full">
+            
+            <!-- Mobile Header -->
+            <div class="md:hidden flex items-center justify-between mb-6 pb-4 border-b border-white/10 flex-shrink-0">
+                 <h2 class="text-lg font-bold tracking-wider text-white">ADMIN <span class="gold-text">COMMAND</span></h2>
+                 <button onclick="toggleSidebar()" class="p-2 rounded-lg border border-white/10 hover:bg-white/5 text-white">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
+                 </button>
+            </div>
+
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="space-y-6 fade-in">
+                <header class="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4 md:gap-0">
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold">System Overview</h2>
+                        <p class="text-sm md:text-base text-gray-400">Real-time metrics from global nodes.</p>
+                    </div>
+                    <div class="text-right w-full md:w-auto">
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-900/30 border border-green-500/30 text-green-400 text-xs font-mono">
+                            <span class="relative flex h-2 w-2">
+                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                              <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                            </span>
+                            SYSTEM ONLINE
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Metrics Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                    <div class="glass-panel p-6 rounded-lg border-t-2 border-t-yellow-500">
+                        <h3 class="text-sm text-gray-400 uppercase tracking-wider">Total Asset Value</h3>
+                        <p class="text-2xl md:text-3xl font-bold mt-2 font-mono gold-text" id="metric-total-value">$0.00</p>
+                    </div>
+                    <div class="glass-panel p-6 rounded-lg border-t-2 border-t-blue-500">
+                        <h3 class="text-sm text-gray-400 uppercase tracking-wider">Active Shipments</h3>
+                        <p class="text-2xl md:text-3xl font-bold mt-2 font-mono text-blue-400" id="metric-active-shipments">0</p>
+                    </div>
+                    <div class="glass-panel p-6 rounded-lg border-t-2 border-t-purple-500">
+                        <h3 class="text-sm text-gray-400 uppercase tracking-wider">Total Transactions</h3>
+                        <p class="text-2xl md:text-3xl font-bold mt-2 font-mono text-purple-400" id="metric-total-transactions">0</p>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="glass-panel p-4 md:p-6 rounded-lg mt-6">
+                    <h3 class="text-lg font-semibold mb-4">Asset Distribution</h3>
+                    <div class="h-64 w-full">
+                        <canvas id="adminChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Transactions View -->
+            <section id="view-transactions" class="hidden space-y-6 fade-in flex flex-col h-full">
+                <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold">Transaction Registry</h2>
+                        <p class="text-sm md:text-base text-gray-400">Monitor Buy/Sell orders and update payment status.</p>
+                    </div>
+                    <button onclick="refreshData()" class="p-2 glass-panel rounded hover:bg-white/10 transition self-end md:self-auto">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+                    </button>
+                </header>
+                
+                <div class="glass-panel rounded-lg overflow-x-auto">
+                    <div class="min-w-[800px]">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-white/5 text-xs uppercase text-gray-400">
+                                <tr>
+                                    <th class="p-4">Date</th>
+                                    <th class="p-4">Type</th>
+                                    <th class="p-4">Asset</th>
+                                    <th class="p-4">Value</th>
+                                    <th class="p-4">Status</th>
+                                    <th class="p-4">Receipt</th>
+                                    <th class="p-4">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactions-table-body" class="text-sm">
+                                <!-- Transactions injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Shipments View -->
+            <section id="view-shipments" class="hidden space-y-6 fade-in flex flex-col h-full">
+                <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold">Logistics Command</h2>
+                        <p class="text-sm md:text-base text-gray-400">Manage and update global asset movements.</p>
+                    </div>
+                    <button onclick="refreshData()" class="p-2 glass-panel rounded hover:bg-white/10 transition self-end md:self-auto">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+                    </button>
+                </header>
+
+                <div class="glass-panel rounded-lg overflow-x-auto">
+                    <div class="min-w-[800px]">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-white/5 text-xs uppercase text-gray-400">
+                                <tr>
+                                    <th class="p-4">Tracking ID</th>
+                                    <th class="p-4">Asset</th>
+                                    <th class="p-4">Destination</th>
+                                    <th class="p-4">Status</th>
+                                    <th class="p-4">Progress</th>
+                                    <th class="p-4">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="shipment-table-body" class="text-sm">
+                                <!-- Shipments injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Assets View -->
+            <section id="view-assets" class="hidden space-y-6 fade-in">
+                <header class="mb-6">
+                    <h2 class="text-2xl md:text-3xl font-bold">Vault Ledger</h2>
+                    <p class="text-sm md:text-base text-gray-400">Complete registry of vaulted assets.</p>
+                </header>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="assets-grid">
+                    <!-- Assets injected here -->
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Universal Edit Modal -->
+        <div id="edit-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden p-4">
+            <div class="glass-panel p-6 rounded-xl max-w-lg w-full shadow-2xl border border-yellow-600/30 relative">
+                 <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+                </button>
+                <h3 class="text-xl font-bold mb-1" id="modal-title">Update Status</h3>
+                <p class="text-sm text-gray-400 mb-4 mono break-all" id="modal-subtitle">ID: ...</p>
+                
+                <div id="modal-details-view" class="mb-4 p-3 bg-white/5 rounded border border-white/10 text-sm space-y-1 hidden">
+                     <p class="flex justify-between flex-wrap"><span class="text-gray-500">User ID:</span> <span id="detail-user-id" class="mono text-xs break-all">...</span></p>
+                     <p class="flex justify-between"><span class="text-gray-500">Amount:</span> <span id="detail-amount" class="text-white font-bold">...</span></p>
+                     <p class="flex justify-between"><span class="text-gray-500">Date:</span> <span id="detail-date">...</span></p>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs uppercase text-gray-500 mb-1">New Status</label>
+                        <select id="modal-status" class="w-full themed-input p-2 rounded bg-gray-800">
+                            <!-- Options populated by JS -->
+                        </select>
+                    </div>
+                    <div id="modal-desc-container">
+                        <label class="block text-xs uppercase text-gray-500 mb-1">Location / Note</label>
+                        <textarea id="modal-desc" rows="3" class="w-full themed-input p-2 rounded" placeholder="Details..."></textarea>
+                        
+                        <div class="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/10">
+                            <div>
+                                <label class="block text-xs uppercase text-gray-500 mb-1">Current Lat</label>
+                                <input type="number" id="modal-lat" step="any" class="w-full themed-input p-2 rounded font-mono text-xs" placeholder="e.g. 41.1234">
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase text-gray-500 mb-1">Current Lng</label>
+                                <input type="number" id="modal-lng" step="any" class="w-full themed-input p-2 rounded font-mono text-xs" placeholder="e.g. 28.5678">
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-2">* Leaving coords empty will auto-calculate based on status.</p>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button onclick="closeModal()" class="px-4 py-2 rounded hover:bg-white/10 transition text-sm">Cancel</button>
+                    <button onclick="saveStatusUpdate()" class="px-6 py-2 gold-bg rounded font-bold text-sm shadow-lg hover:shadow-yellow-500/20 transition w-full md:w-auto">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 md:right-10 left-5 md:left-auto bg-white text-black px-6 py-3 rounded shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 font-bold text-center">
+        Action Completed
+    </div>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDT7XhZj_cikP3quWFQ3Tgcjqkyvr6VuWY",
+            authDomain: "aura-gold-vault-372ad.firebaseapp.com",
+            projectId: "aura-gold-vault-372ad",
+            storageBucket: "aura-gold-vault-372ad.firebasestorage.app",
+            messagingSenderId: "598585125860",
+            appId: "1:598585125860:web:099086d9025fb0bf75b5f1",
+            measurementId: "G-LSG76W3XLC"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        
+        // --- 3D Scene Setup (Three.js) ---
+        const init3D = () => {
+            const container = document.getElementById('canvas-container');
+            const scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x050505, 0.002);
+
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 15;
+            camera.position.y = 5;
+
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 0.5;
+
+            const geometry = new THREE.IcosahedronGeometry(8, 2);
+            const material = new THREE.MeshBasicMaterial({ color: 0xd4af37, wireframe: true, transparent: true, opacity: 0.1 });
+            const globe = new THREE.Mesh(geometry, material);
+            scene.add(globe);
+
+            const coreGeo = new THREE.IcosahedronGeometry(6, 1);
+            const coreMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.8 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            scene.add(core);
+
+            const particlesGeometry = new THREE.BufferGeometry();
+            const particlesCount = 700;
+            const posArray = new Float32Array(particlesCount * 3);
+            for(let i = 0; i < particlesCount * 3; i++) {
+                posArray[i] = (Math.random() - 0.5) * 40;
+            }
+            particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const particlesMaterial = new THREE.PointsMaterial({ size: 0.05, color: 0xd4af37, transparent: true, opacity: 0.8 });
+            const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+            scene.add(particlesMesh);
+
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xd4af37, 2, 100);
+            pointLight.position.set(10, 10, 10);
+            scene.add(pointLight);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                globe.rotation.y += 0.001;
+                particlesMesh.rotation.y -= 0.0005;
+                renderer.render(scene, camera);
+            }
+            animate();
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        };
+        init3D();
+
+        // --- State ---
+        let currentUser = null;
+        let shipmentsData = [];
+        let assetsData = [];
+        let transactionsData = [];
+        let editingItem = null;
+        let unsubscribeListeners = [];
+        let simulationInterval = null;
+
+        // --- Utils ---
+        const showToast = (msg, type = 'success') => {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = `fixed bottom-5 right-5 md:right-10 left-5 md:left-auto px-6 py-3 rounded shadow-lg transform transition-all duration-300 z-50 font-bold text-center ${type === 'error' ? 'bg-red-600 text-white' : 'bg-white text-black'}`;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+        };
+
+        // --- Mobile Sidebar Logic ---
+        const toggleSidebar = () => {
+            const sidebar = document.getElementById('admin-sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            sidebar.classList.toggle('open');
+            backdrop.classList.toggle('hidden');
+        };
+
+        const switchView = (viewId) => {
+            document.querySelectorAll('section').forEach(el => el.classList.add('hidden'));
+            const view = document.getElementById(`view-${viewId}`);
+            view.classList.remove('hidden');
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`nav-${viewId}`).classList.add('active');
+
+            if (window.innerWidth < 768) {
+                toggleSidebar();
+            }
+        };
+
+        // --- Firestore Data Fetching ---
+        const fetchData = async () => {
+            if (!currentUser) return;
+            try {
+                // Fetch shipments
+                const shipmentsSnapshot = await db.collection('shipments').get();
+                shipmentsData = shipmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderShipments();
+
+                // Fetch transactions
+                const transactionsSnapshot = await db.collection('transactions').get();
+                transactionsData = transactionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderTransactions();
+
+                // Fetch assets
+                const assetsSnapshot = await db.collection('assets').get();
+                assetsData = assetsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderAssets();
+                
+                renderDashboard();
+
+            } catch (err) {
+                console.error("Data Fetch Error:", err);
+                showToast("Failed to sync with Vault Database", 'error');
+            }
+        };
+
+        // --- Set up real-time listeners ---
+        const setupRealtimeListeners = () => {
+            // Clear existing listeners
+            unsubscribeListeners.forEach(unsubscribe => unsubscribe());
+            unsubscribeListeners = [];
+
+            // Listen to shipments
+            const shipmentsUnsub = db.collection('shipments').onSnapshot(snapshot => {
+                shipmentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderShipments();
+                renderDashboard();
+            });
+            unsubscribeListeners.push(shipmentsUnsub);
+
+            // Listen to transactions
+            const transactionsUnsub = db.collection('transactions').onSnapshot(snapshot => {
+                transactionsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderTransactions();
+                renderDashboard();
+            });
+            unsubscribeListeners.push(transactionsUnsub);
+
+            // Listen to assets
+            const assetsUnsub = db.collection('assets').onSnapshot(snapshot => {
+                assetsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderAssets();
+                renderDashboard();
+            });
+            unsubscribeListeners.push(assetsUnsub);
+        };
+
+        // --- Rendering ---
+        const renderDashboard = () => {
+            const totalVal = assetsData.reduce((sum, a) => sum + (a.value || 0), 0);
+            const activeShipments = shipmentsData.filter(s => s.status !== 'Delivered').length;
+            const totalTx = transactionsData.length;
+            
+            document.getElementById('metric-total-value').textContent = `$${totalVal.toLocaleString()}`;
+            document.getElementById('metric-active-shipments').textContent = activeShipments;
+            document.getElementById('metric-total-transactions').textContent = totalTx;
+
+            const ctx = document.getElementById('adminChart').getContext('2d');
+            const types = {};
+            assetsData.forEach(a => { types[a.type] = (types[a.type] || 0) + (a.value || 0) });
+
+            if (window.myChart) window.myChart.destroy();
+            window.myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(types),
+                    datasets: [{
+                        label: 'Asset Value by Type',
+                        data: Object.values(types),
+                        backgroundColor: ['#d4af37', '#c0c0c0', '#e5e4e2', '#a0d1e3'],
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#9ca3af' } },
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } }
+                    }
+                }
+            });
+        };
+
+        const renderTransactions = () => {
+            const tbody = document.getElementById('transactions-table-body');
+            tbody.innerHTML = '';
+            
+            // Client-side sorting: Newest first
+            const sortedTx = [...transactionsData].sort((a, b) => {
+                const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+                const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+                return dateB - dateA;
+            });
+
+            sortedTx.forEach(tx => {
+                let statusClass = 'status-completed';
+                if (tx.status === 'Pending' || tx.status === 'Pending Inspection') statusClass = 'status-pending';
+                if (tx.status === 'Under Review') statusClass = 'status-review';
+                if (tx.status === 'Funds Sent') statusClass = 'status-funds';
+                
+                const isSell = tx.type === 'sell';
+                const typeColor = isSell ? 'text-red-400' : 'text-green-400';
+
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
+                const timestamp = tx.timestamp?.toDate ? tx.timestamp.toDate() : new Date(tx.timestamp);
+                tr.innerHTML = `
+                    <td class="p-4 text-gray-400 whitespace-nowrap">${timestamp.toLocaleDateString()}</td>
+                    <td class="p-4 font-bold uppercase ${typeColor}">${tx.type}</td>
+                    <td class="p-4 text-white whitespace-nowrap">${tx.asset_name}</td>
+                    <td class="p-4 text-gold-400 font-mono">$${(tx.value || 0).toLocaleString()}</td>
+                    <td class="p-4"><span class="status-badge ${statusClass}">${tx.status}</span></td>
+                    <td class="p-4">
+                        <button onclick="downloadReceipt('${tx.id}')" class="p-2 bg-gray-800 text-white rounded hover:bg-gray-700 transition" title="Download Receipt">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                        </button>
+                    </td>
+                    <td class="p-4">
+                        <button onclick="openEditModal('transaction', '${tx.id}')" class="text-sm gold-text hover:text-white underline decoration-dashed whitespace-nowrap">Update Status</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        const renderShipments = () => {
+            const tbody = document.getElementById('shipment-table-body');
+            tbody.innerHTML = '';
+            
+            // Sort by active status then ID
+            const sortedShipments = [...shipmentsData].sort((a, b) => {
+                if (a.status === 'Delivered' && b.status !== 'Delivered') return 1;
+                if (a.status !== 'Delivered' && b.status === 'Delivered') return -1;
+                return b.tracking_number.localeCompare(a.tracking_number);
+            });
+
+            sortedShipments.forEach(s => {
+                let badgeClass = 'status-processing';
+                if (s.status === 'In Transit') badgeClass = 'status-transit';
+                if (s.status === 'Delivered') badgeClass = 'status-delivered';
+                
+                let progress = s.progress || 0;
+                // Fallback estimate if no progress
+                if (!s.progress) {
+                    if (s.status === 'Delivered') progress = 100;
+                    else if (s.status === 'In Transit') progress = 50;
+                    else progress = 10;
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
+                tr.innerHTML = `
+                    <td class="p-4 mono text-xs text-gray-400 whitespace-nowrap">${s.tracking_number}</td>
+                    <td class="p-4 font-medium text-white whitespace-nowrap">${s.asset_name}</td>
+                    <td class="p-4 text-gray-400 truncate max-w-xs">${s.destination_address}</td>
+                    <td class="p-4"><span class="status-badge ${badgeClass}">${s.status}</span></td>
+                    <td class="p-4">
+                        <div class="w-full bg-gray-700 rounded-full h-1.5 dark:bg-gray-700">
+                            <div class="bg-blue-600 h-1.5 rounded-full" style="width: ${progress}%"></div>
+                        </div>
+                        <span class="text-xs text-gray-500">${progress}%</span>
+                    </td>
+                    <td class="p-4">
+                        <button onclick="openEditModal('shipment', '${s.id}')" class="text-sm gold-text hover:text-white underline decoration-dashed whitespace-nowrap">Edit Status</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        };
+
+        const renderAssets = () => {
+            const grid = document.getElementById('assets-grid');
+            grid.innerHTML = '';
+            assetsData.forEach(a => {
+                const card = document.createElement('div');
+                card.className = 'glass-panel p-4 rounded flex items-center gap-4 hover:border-yellow-500/50 transition';
+                card.innerHTML = `
+                    <div class="w-12 h-12 bg-gray-800 rounded flex-shrink-0 flex items-center justify-center text-xl">
+                        ${a.type === 'Gold' ? 'G' : (a.type === 'Silver' ? 'S' : 'A')}
+                    </div>
+                    <div class="overflow-hidden">
+                        <h4 class="font-bold text-white truncate">${a.name}</h4>
+                        <p class="text-xs text-gray-400 mono">${a.weight}g • ${a.purity}%</p>
+                        <p class="text-gold-400 font-mono text-sm mt-1">$${(a.value || 0).toLocaleString()}</p>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        };
+        
+        async function downloadReceipt(transactionId) {
+            const tx = transactionsData.find(t => t.id === transactionId);
+            if (!tx) return;
+            
+            const doc = new jsPDF();
+            
+            // Header
+            doc.setFillColor(212, 175, 55); // Gold color
+            doc.rect(0, 0, 210, 40, 'F');
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(22);
+            doc.text("AURA GOLD VAULT", 105, 20, null, null, "center");
+            doc.setFontSize(12);
+            doc.text("Admin Transaction Record", 105, 30, null, null, "center");
+            
+            // Details
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(12);
+            doc.text(`Transaction ID: ${tx.id}`, 20, 60);
+            const dateStr = tx.timestamp?.toDate ? tx.timestamp.toDate().toLocaleString() : new Date(tx.timestamp).toLocaleString();
+            doc.text(`Date: ${dateStr}`, 20, 70);
+            doc.text(`Type: ${tx.type.toUpperCase()}`, 20, 80);
+            doc.text(`Status: ${tx.status}`, 20, 90);
+            doc.text(`User ID: ${tx.userId || 'N/A'}`, 20, 100);
+            
+            // Line Item
+            doc.setDrawColor(200, 200, 200);
+            doc.line(20, 110, 190, 110);
+            
+            doc.text("Item Details:", 20, 120);
+            doc.text(`${tx.asset_name}`, 20, 130);
+            doc.text(`Amount: ${tx.amount}g`, 150, 130, null, null, "right");
+            
+            doc.line(20, 140, 190, 140);
+            
+            // Total
+            doc.setFontSize(16);
+            doc.text(`Total Value: $${tx.value.toLocaleString('en-US', {minimumFractionDigits: 2})}`, 190, 155, null, null, "right");
+            
+            doc.save(`admin_receipt_${tx.id}.pdf`);
+        }
+
+        // --- Modal Logic ---
+        window.openEditModal = (type, id) => {
+            editingItem = { type, id };
+            const select = document.getElementById('modal-status');
+            const detailView = document.getElementById('modal-details-view');
+            select.innerHTML = '';
+            document.getElementById('modal-desc').value = '';
+            document.getElementById('modal-lat').value = '';
+            document.getElementById('modal-lng').value = '';
+
+            if (type === 'shipment') {
+                const item = shipmentsData.find(s => s.id == id);
+                if (!item) { console.error("Shipment not found", id); return; }
+
+                document.getElementById('modal-title').textContent = 'Update Shipment';
+                document.getElementById('modal-subtitle').textContent = `TRACKING: ${item.tracking_number}`;
+                document.getElementById('modal-desc-container').classList.remove('hidden');
+                
+                detailView.classList.add('hidden');
+                
+                ['Processing', 'In Transit', 'Delivered'].forEach(opt => {
+                    const el = document.createElement('option');
+                    el.value = opt; el.text = opt;
+                    if(item.status === opt) el.selected = true;
+                    select.appendChild(el);
+                });
+            } else if (type === 'transaction') {
+                const item = transactionsData.find(t => t.id == id);
+                if (!item) { console.error("Transaction not found", id); return; }
+
+                const isSell = item.type === 'sell';
+                
+                document.getElementById('modal-title').textContent = `Update ${isSell ? 'Sell' : 'Buy'} Order`;
+                document.getElementById('modal-subtitle').textContent = `ASSET: ${item.asset_name}`;
+                document.getElementById('modal-desc-container').classList.add('hidden'); 
+
+                detailView.classList.remove('hidden');
+                document.getElementById('detail-user-id').textContent = item.userId || item.user_id || 'N/A';
+                document.getElementById('detail-amount').textContent = `$${(item.value || 0).toLocaleString()}`;
+                const timestamp = item.timestamp?.toDate ? item.timestamp.toDate() : new Date(item.timestamp);
+                document.getElementById('detail-date').textContent = timestamp.toLocaleString();
+
+                let options = [];
+                if (isSell) {
+                    options = ['Pending Inspection', 'Processing Payout', 'Funds Sent', 'Completed', 'Rejected'];
+                } else {
+                    options = ['Pending', 'Payment Received', 'Preparing Shipment', 'Completed', 'Cancelled', 'In Vault'];
+                }
+                
+                options.forEach(opt => {
+                    const el = document.createElement('option');
+                    el.value = opt; el.text = opt;
+                    if(item.status === opt) el.selected = true;
+                    select.appendChild(el);
+                });
+            }
+
+            document.getElementById('edit-modal').classList.remove('hidden');
+        };
+
+        window.closeModal = () => {
+            document.getElementById('edit-modal').classList.add('hidden');
+            editingItem = null;
+        };
+
+        window.saveStatusUpdate = async () => {
+            if (!editingItem) return;
+            const newStatus = document.getElementById('modal-status').value;
+            const newDesc = document.getElementById('modal-desc').value || `Status updated to ${newStatus} by Admin Command.`;
+            
+            const lat = document.getElementById('modal-lat').value;
+            const lng = document.getElementById('modal-lng').value;
+
+            if (editingItem.type === 'shipment') {
+                const shipment = shipmentsData.find(s => s.id == editingItem.id);
+                let history = shipment.status_history || [];
+                
+                const newEntry = { 
+                    title: newStatus, 
+                    description: newDesc, 
+                    date: new Date().toISOString() 
+                };
+
+                if (lat && lng) {
+                    newEntry.location = { lat: parseFloat(lat), lng: parseFloat(lng) };
+                }
+
+                history.unshift(newEntry);
+                
+                // Update progress based on status manually if needed
+                let newProgress = shipment.progress || 0;
+                if (newStatus === 'Delivered') newProgress = 100;
+                else if (newStatus === 'In Transit' && newProgress < 20) newProgress = 20;
+                
+                try {
+                    await db.collection('shipments').doc(editingItem.id).update({ 
+                        status: newStatus, 
+                        status_history: history,
+                        progress: newProgress
+                    });
+                    showToast('Shipment Updated');
+                    closeModal();
+                } catch (error) {
+                    showToast(`Error: ${error.message}`, 'error');
+                }
+
+            } else if (editingItem.type === 'transaction') {
+                try {
+                    await db.collection('transactions').doc(editingItem.id).update({ status: newStatus });
+                    showToast('Transaction Status Updated');
+                    closeModal();
+                } catch (error) {
+                    showToast(`Error: ${error.message}`, 'error');
+                }
+            }
+        };
+        
+        window.refreshData = () => {
+            fetchData();
+            showToast('Data Refreshed');
+        }
+
+        // --- Auth ---
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('admin-email').value;
+            const password = document.getElementById('admin-password').value;
+
+            // Only allow specific admin credentials
+            if (email !== 'panda@gmail.com' || password !== '1002.Xtra') {
+                showToast('Invalid admin credentials', 'error');
+                return;
+            }
+
+            try {
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                currentUser = userCredential.user;
+                
+                document.getElementById('login-overlay').classList.add('hidden');
+                document.getElementById('app-container').classList.remove('hidden');
+                document.getElementById('admin-id-display').textContent = `ID: ${email.toUpperCase()}`;
+                
+                showToast("Admin Access Granted");
+                fetchData();
+                setupRealtimeListeners();
+                startTrackingSimulation();
+
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            unsubscribeListeners.forEach(unsubscribe => unsubscribe());
+            unsubscribeListeners = [];
+            if (simulationInterval) clearInterval(simulationInterval);
+            await auth.signOut();
+            window.location.reload();
+        });
+
+        // Check auth state on load
+        auth.onAuthStateChanged((user) => {
+            if (user && user.email === 'panda@gmail.com') {
+                currentUser = user;
+                document.getElementById('login-overlay').classList.add('hidden');
+                document.getElementById('app-container').classList.remove('hidden');
+                document.getElementById('admin-id-display').textContent = `ID: ${user.email.toUpperCase()}`;
+                fetchData();
+                setupRealtimeListeners();
+                startTrackingSimulation();
+            }
+        });
+        
+        // --- TRACKING SIMULATION (Background Job for Admin) ---
+        function startTrackingSimulation() {
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+            }
+            console.log("Starting tracking simulation...");
+            
+            simulationInterval = setInterval(async () => {
+                if (!db || !currentUser) return;
+
+                const activeShipments = shipmentsData.filter(s => s.status !== 'Delivered');
+                if (activeShipments.length === 0) return;
+                
+                // Update 1 random shipment
+                const shipmentToUpdate = activeShipments[Math.floor(Math.random() * activeShipments.length)];
+                
+                let newStatus = shipmentToUpdate.status;
+                let newStatusHistory = shipmentToUpdate.status_history || [];
+                let currentProgress = shipmentToUpdate.progress || 0;
+                
+                // Simulate progress movement
+                if (newStatus !== 'Delivered') {
+                     currentProgress += Math.floor(Math.random() * 10) + 5;
+                     if (currentProgress > 100) currentProgress = 100;
+                }
+
+                let statusChanged = false;
+                const statusUpdate = { date: new Date().toISOString() };
+                const destinationCity = shipmentToUpdate.destination_address.includes('Istanbul') ? 'Istanbul' : 'your destination';
+
+                if (shipmentToUpdate.status === 'Processing' && currentProgress > 20) {
+                    newStatus = 'In Transit';
+                    statusUpdate.title = "In Transit";
+                    statusUpdate.description = `Asset has left our Aura vault and is en route to the ${destinationCity} distribution center.`;
+                    statusChanged = true;
+                } else if (shipmentToUpdate.status === 'In Transit' && currentProgress === 100) {
+                    newStatus = 'Delivered';
+                    statusUpdate.title = "Delivered";
+                    statusUpdate.description = `Asset has been securely delivered and signed for at your address in ${destinationCity}.`;
+                    statusChanged = true;
+                }
+                
+                if (statusChanged) {
+                    newStatusHistory.push(statusUpdate);
+                }
+
+                try {
+                    const updateData = { progress: currentProgress };
+                    if (statusChanged) {
+                        updateData.status = newStatus;
+                        updateData.status_history = newStatusHistory;
+                    }
+
+                    await db.collection('shipments').doc(shipmentToUpdate.id).update(updateData);
+                    console.log(`Simulation: Updated ${shipmentToUpdate.tracking_number} progress to ${currentProgress}%`);
+
+                } catch (error) {
+                    console.error("Simulation Error:", error);
+                }
+                
+            }, 5000); // Check every 5 seconds
+        }
+
+    </script>
+</body>
+</html>
